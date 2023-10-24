@@ -1,17 +1,14 @@
 using System;
 using System.Linq;
-using System.Text;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Windows;
-using VMS.TPS.Common.Model.API;
-using VMS.TPS.Common.Model.Types;
 
 using CustomAttributes;
 using EsapiDebugSetup;
 using Telemetry;
+using VMS.TPS.Common.Model.API;
 
 using Application = VMS.TPS.Common.Model.API.Application;
 using ScriptContext = Context.ScriptContext;
@@ -39,6 +36,7 @@ namespace DeleteStructures_sa
     {
         private static string ScriptName = "Delete Structures (stand-alone)";
         private static ScriptTelemetry _telemetry = null;
+        private static Application _app = null;
 
         private static void SetUpTelemetry()
         {
@@ -89,13 +87,42 @@ namespace DeleteStructures_sa
             SetUpTelemetry();
         }
         [STAThread]
-        static void Main(string[] args)
+        static void Main(/*string[] args*/)
         {
             try
             {
                 using (Application app = Application.CreateApplication())
                 {
-                    Execute(app);
+                    #region Set up debugging
+
+                    _app = app;
+                    EsapiDebugSetupClass.RegisterContextFactory(ScriptContext.CreateContext);
+                    //EsapiDebugSetupClass.PatientID = "ESAPI_Rename_Test";
+                    //EsapiDebugSetupClass.PatientID = "Z_ESAPI_convert2HiRes";
+                    EsapiDebugSetupClass.PatientID = "ESAPI_Rename_Test";
+                    EsapiDebugSetupClass.CourseID = "";
+                    EsapiDebugSetupClass.PlanID = "";
+                    try
+                    {
+                        EsapiDebugSetupClass.LoadPatient(app);
+                    }
+                    catch (Exception e)
+                    {
+                        _ = MessageBox.Show($"Error loading patient: {e.Message}");
+                        return;
+                    }
+                    ScriptContext _context = (ScriptContext)EsapiDebugSetupClass.CreateContext();
+                    _context.CurrentUser = new User()
+                    {
+                        Name = app.CurrentUser.Name
+                    };
+
+                    Window _window = new Window();
+
+                    #endregion
+
+                    //Execute(app);
+                    Execute(_context, _window);
                 }
             }
             catch (Exception e)
@@ -103,38 +130,12 @@ namespace DeleteStructures_sa
                 Console.Error.WriteLine(e.ToString());
             }
         }
-        static void Execute(Application app)
+        //static void Execute(Application app)
+        static void Execute(ScriptContext context, Window window)
         {
-            #region Setup for debugging
-
-            EsapiDebugSetupClass.RegisterContextFactory(ScriptContext.CreateContext);
-            //EsapiDebugSetupClass.PatientID = "ESAPI_Rename_Test";
-            //EsapiDebugSetupClass.PatientID = "Z_ESAPI_convert2HiRes";
-            EsapiDebugSetupClass.PatientID = "ESAPI_Rename_Test";
-            EsapiDebugSetupClass.CourseID = "";
-            EsapiDebugSetupClass.PlanID = "";
             try
             {
-                EsapiDebugSetupClass.LoadPatient(app);
-            }
-            catch (Exception e)
-            {
-                _ = MessageBox.Show($"Error loading patient: {e.Message}");
-                return;
-            }
-            ScriptContext context = (ScriptContext)EsapiDebugSetupClass.CreateContext();
-            context.CurrentUser = new User()
-            {
-                Name = app.CurrentUser.Name
-            };
-
-            Window window = new Window();
-
-            #endregion
-
-            try
-            {
-                #region Execute bits for the windowed script - checking that everything is loaded
+                #region Execute bits for the plugin - checking that everything is loaded
 
                 window.Closing += Window_Closing;
                 window.Title = ScriptName;
@@ -169,7 +170,7 @@ namespace DeleteStructures_sa
 
                 #endregion
 
-                _ = window.ShowDialog();
+                _ = window.ShowDialog();    //  Not required outside stand-alone script
             }
             catch (Exception ex)
             {
@@ -185,10 +186,10 @@ namespace DeleteStructures_sa
             }
             finally
             {
-                if (context.Patient != null)
+                if (context.Patient != null)     //  Not required outside stand-alone script
                 {
-                    //app.SaveModifications();  //  We don't want to actually apply the modifications to the database
-                    app.ClosePatient();
+                    //_app.SaveModifications();  //  We don't want to actually apply the modifications to the database
+                    _app.ClosePatient();
                 }
             }
         }
